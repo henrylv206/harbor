@@ -148,9 +148,9 @@ func main() {
 	beego.InsertFilter("/api/*", beego.BeforeRouter, filter.MediaTypeFilter("application/json"))
 
 	initRouters()
-#	if err := api.SyncRegistry(config.GlobalProjectMgr); err != nil {
-#		log.Error(err)
-#	}
+//	if err := api.SyncRegistry(config.GlobalProjectMgr); err != nil {
+//		log.Error(err)
+//	}
 	log.Info("Init proxy")
 	proxy.Init()
 	//go proxy.StartProxy()
