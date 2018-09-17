@@ -18,7 +18,48 @@ import (
 	"github.com/vmware/harbor/src/common/dao"
 	"github.com/vmware/harbor/src/common/models"
 	"github.com/vmware/harbor/src/ui/auth"
+	"net/http"
+	"crypto/md5"
+	"encoding/hex"
+	"encoding/json"
 )
+
+
+// jd erp data
+type ERP_DATA struct {
+
+	UserId int
+
+	Fullname string
+
+	Email string
+
+	Mobile string
+
+	PersonId string
+
+	OrgId string
+
+	OrgName string
+
+	HrmDeptId string
+
+	Expire int
+
+	Username string
+
+}
+
+// jd erp
+type ERP struct {
+	REQ_DATA ERP_DATA
+
+	REQ_FLAG bool
+
+	REQ_CODE int
+
+	REQ_MSG string
+}
 
 // Auth implements Authenticator interface to authenticate user against DB.
 type Auth struct {
@@ -27,20 +68,47 @@ type Auth struct {
 
 // Authenticate calls dao to authenticate user.
 func (d *Auth) Authenticate(m models.AuthModel) (*models.User, error) {
-        u := models.User{}
-        u.UserID = 559382
-	u.Username = "lvhonglei"
-	u.Email = "lvhonglei@jd.com"
-	u.Realname = "lvhonglei"
 
-//	u, err := dao.LoginByDb(m)
-//	if err != nil {
-//		return nil, err
-//	}
-//	if u == nil {
-//		return nil, auth.NewErrAuth("Invalid credentials")
-//	}
-	return &u, nil
+	// verify
+	hasher := md5.New()
+	hasher.Write([]byte(m.Password))
+	password := hex.EncodeToString(hasher.Sum(nil))
+
+	url := "http://ssa.jd.com/sso/verify?username=" + m.Principal + "&password=" + password
+
+	req, _ := http.NewRequest("GET", url, nil)
+
+	res, _ := http.DefaultClient.Do(req)
+
+	defer res.Body.Close()
+
+	var erp ERP
+	json.NewDecoder(res.Body).Decode(&erp)
+
+	if erp.REQ_FLAG {
+		erp_data := erp.REQ_DATA
+
+		u := models.User{
+			Username: erp_data.Username,
+			Email: erp_data.Email,
+			Realname: erp_data.Fullname,
+			Comment: "From JD SSA",
+		}
+
+		// save to local db
+		var queryCondition = models.User{
+			Username: erp_data.Username,
+		}
+
+		isExist, _ := dao.UserExists(queryCondition,  "username")
+		if !isExist {
+			dao.OnBoardUser(&u)
+		}
+
+		return &u, nil
+	} else {
+		return nil, auth.NewErrAuth("Invalid credentials")
+	}
 }
 
 // SearchUser - Check if user exist in local db
